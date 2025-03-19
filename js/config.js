@@ -1,13 +1,14 @@
-// Firebase configuration
+// Configurazione Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyCDmn4i_rPR01HFJdwZpKLKJsOX60iR4NM",
-  authDomain: "edilcoperture-ore-lavoratori.firebaseapp.com",
-  projectId: "edilcoperture-ore-lavoratori",
-  storageBucket: "edilcoperture-ore-lavoratori.appspot.com",
-  messagingSenderId: "106929196358",
-  appId: "1:106929196358:web:b57d2f21e908b0a0f5a94c"
+  apiKey: "AIzaSyCE_MXk6bFR2Z36rhbjjukS_6zvNC3SOaw",
+  authDomain: "ediplan-ore-lavoro.firebaseapp.com",
+  projectId: "ediplan-ore-lavoro",
+  storageBucket: "ediplan-ore-lavoro.firebasestorage.app",
+  messagingSenderId: "700515290610",
+  appId: "1:700515290610:web:6d6da414c787597842af6b",
+  measurementId: "G-NGY003GTJV"
 };
 
-// Initialize Firebase
+// Inizializza Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
