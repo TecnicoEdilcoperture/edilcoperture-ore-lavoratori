@@ -513,10 +513,24 @@ async function fetchOperai() {
     }
 }
 
-// Funzione per recuperare i cantieri dal server
 async function fetchCantieri() {
     try {
-        const response = await fetch('http://localhost:3000/api/esporta-cantieri');
+        // Determina se siamo in locale o in produzione
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const serverUrl = isLocal ? 'http://localhost:3000' : 'https://api.edilcoperture.com'; // Aggiorna con il tuo dominio reale
+        
+        console.log("Fetching cantieri from:", isLocal ? "local server" : "production server");
+        
+        let response;
+        
+        if (isLocal) {
+            // In locale, usa l'API del server
+            response = await fetch(`${serverUrl}/api/esporta-cantieri`);
+        } else {
+            // In produzione, usa i dati di fallback direttamente
+            throw new Error('Utilizzo dati di fallback');
+        }
+        
         const data = await response.json();
         
         if (data.success) {
