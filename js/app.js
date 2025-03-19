@@ -305,62 +305,60 @@ function sincronizzaDati() {
         return;
     }
     
-    const promises = [];
-    
-    // Sincronizza ogni registrazione
-    registrazioniDaSincronizzare.forEach(reg => {
-        const promise = db.collection('registrazioniOre').add({
-            operaioId: reg.operaioId,
-            operaioNome: reg.operaioNome,
-            data: reg.data,
-            cantiereId: reg.cantiereId,
-            cantiereName: reg.cantiereName,
-            ore: reg.ore,
-            oreStrada: reg.oreStrada || 0,
-            straordinario: reg.straordinario || 0,
-            note: reg.note,
-            timestamp: reg.timestamp,
-            sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        promises.push(promise);
-    });
-    
-    // Processa tutte le promesse
-    Promise.all(promises)
-        .then(() => {
-            // Aggiorna lo stato di sincronizzazione
-            registrazioni.forEach(reg => {
-                if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
-                    reg.sincronizzato = true;
-                }
+    // Gestione degli errori per assicurarsi che il toast venga rimosso in ogni caso
+    try {
+        // Esegui sincronizzazione e gestisci promesse
+        Promise.all(registrazioniDaSincronizzare.map(reg => {
+            return db.collection('registrazioniOre').add({
+                operaioId: reg.operaioId,
+                operaioNome: reg.operaioNome,
+                data: reg.data,
+                cantiereId: reg.cantiereId,
+                cantiereName: reg.cantiereName,
+                ore: reg.ore,
+                oreStrada: reg.oreStrada || 0,
+                straordinario: reg.straordinario || 0,
+                note: reg.note,
+                timestamp: reg.timestamp,
+                sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => {
+                console.error("Errore nella sincronizzazione:", e);
+                return null; // Restituisci null invece di far fallire la Promise.all
             });
-            localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
+        }))
+        .then(results => {
+            // Conta i risultati di successo (non null)
+            const successCount = results.filter(r => r !== null).length;
             
-            // Aggiorna il toast per indicare il successo
+            // Aggiorna stato sincronizzazione
+            if (successCount > 0) {
+                registrazioni.forEach(reg => {
+                    if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
+                        reg.sincronizzato = true;
+                    }
+                });
+                localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
+            }
+            
+            // Aggiorna toast
             toastContainer.innerHTML = `
                 <div class="toast show" role="alert">
-                    <div class="toast-header bg-success text-white">
+                    <div class="toast-header bg-${successCount === registrazioniDaSincronizzare.length ? 'success' : 'warning'} text-white">
                         <strong class="me-auto">Sincronizzazione</strong>
                     </div>
                     <div class="toast-body">
                         <div class="d-flex align-items-center">
-                            <i class="fas fa-check-circle text-success me-2"></i>
-                            <span>Sincronizzazione completata</span>
+                            <i class="fas fa-${successCount === registrazioniDaSincronizzare.length ? 'check-circle text-success' : 'exclamation-triangle text-warning'} me-2"></i>
+                            <span>${successCount === registrazioniDaSincronizzare.length ? 'Sincronizzazione completata' : `Sincronizzati ${successCount}/${registrazioniDaSincronizzare.length} record`}</span>
                         </div>
                     </div>
                 </div>
             `;
             
-            // Rimuovi il toast dopo 3 secondi
-            setTimeout(() => {
-                toastContainer.remove();
-            }, 3000);
+            setTimeout(() => toastContainer.remove(), 3000);
         })
         .catch(error => {
-            console.error('Errore nella sincronizzazione:', error);
-            
-            // Aggiorna il toast per indicare l'errore
+            console.error('Errore generale nella sincronizzazione:', error);
             toastContainer.innerHTML = `
                 <div class="toast show" role="alert">
                     <div class="toast-header bg-danger text-white">
@@ -374,12 +372,26 @@ function sincronizzaDati() {
                     </div>
                 </div>
             `;
-            
-            // Rimuovi il toast dopo 3 secondi
-            setTimeout(() => {
-                toastContainer.remove();
-            }, 3000);
+            setTimeout(() => toastContainer.remove(), 3000);
         });
+    } catch (e) {
+        // Gestisce errori generali e garantisce la rimozione del toast
+        console.error('Errore critico nella sincronizzazione:', e);
+        toastContainer.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header bg-danger text-white">
+                    <strong class="me-auto">Sincronizzazione</strong>
+                </div>
+                <div class="toast-body">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-circle text-danger me-2"></i>
+                        <span>Errore critico nella sincronizzazione</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        setTimeout(() => toastContainer.remove(), 3000);
+    }
 }
 
 // Carica dati da Firebase
