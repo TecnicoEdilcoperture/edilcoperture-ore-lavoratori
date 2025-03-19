@@ -18,6 +18,7 @@ const totaleStraordinario = document.getElementById('totaleStraordinario');
 const logoutButton = document.getElementById('logoutButton');
 const refreshButton = document.getElementById('refreshButton');
 const offlineBanner = document.getElementById('offlineBanner');
+const oreStrada = document.getElementById('oreStrada');
 
 // Configurazione dati
 let operai = [];
@@ -298,16 +299,13 @@ function sincronizzaDati() {
         
         // Rimuovi il toast dopo 2 secondi
         setTimeout(() => {
-            if (toastContainer && toastContainer.parentNode) {
-                toastContainer.parentNode.removeChild(toastContainer);
-            }
+            toastContainer.remove();
         }, 2000);
         
         return;
     }
     
-    // Promessa per tenere traccia dello stato di sincronizzazione
-    let syncPromises = [];
+    const promises = [];
     
     // Sincronizza ogni registrazione
     registrazioniDaSincronizzare.forEach(reg => {
@@ -323,70 +321,44 @@ function sincronizzaDati() {
             note: reg.note,
             timestamp: reg.timestamp,
             sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
-        }).catch(error => {
-            console.error(`Errore nella sincronizzazione:`, error);
-            return false; // Restituisci false in caso di errore
         });
         
-        syncPromises.push(promise);
+        promises.push(promise);
     });
     
     // Processa tutte le promesse
-    Promise.all(syncPromises)
-        .then(results => {
-            // Filtra solo i risultati di successo
-            const successCount = results.filter(result => result !== false).length;
-            
-            if (successCount > 0) {
-                // Aggiorna lo stato di sincronizzazione
-                registrazioni.forEach(reg => {
-                    if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
-                        reg.sincronizzato = true;
-                    }
-                });
-                localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
-            }
-            
-            // Aggiorna il toast per indicare il successo o l'errore parziale
-            if (successCount === registrazioniDaSincronizzare.length) {
-                toastContainer.innerHTML = `
-                    <div class="toast show" role="alert">
-                        <div class="toast-header bg-success text-white">
-                            <strong class="me-auto">Sincronizzazione</strong>
-                        </div>
-                        <div class="toast-body">
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-check-circle text-success me-2"></i>
-                                <span>Sincronizzazione completata</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                toastContainer.innerHTML = `
-                    <div class="toast show" role="alert">
-                        <div class="toast-header bg-warning text-white">
-                            <strong class="me-auto">Sincronizzazione</strong>
-                        </div>
-                        <div class="toast-body">
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-exclamation-triangle text-warning me-2"></i>
-                                <span>Sincronizzazione parziale (${successCount}/${registrazioniDaSincronizzare.length})</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // IMPORTANTE: Rimuovi sempre il toast dopo alcuni secondi
-            setTimeout(() => {
-                if (toastContainer && toastContainer.parentNode) {
-                    toastContainer.parentNode.removeChild(toastContainer);
+    Promise.all(promises)
+        .then(() => {
+            // Aggiorna lo stato di sincronizzazione
+            registrazioni.forEach(reg => {
+                if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
+                    reg.sincronizzato = true;
                 }
+            });
+            localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
+            
+            // Aggiorna il toast per indicare il successo
+            toastContainer.innerHTML = `
+                <div class="toast show" role="alert">
+                    <div class="toast-header bg-success text-white">
+                        <strong class="me-auto">Sincronizzazione</strong>
+                    </div>
+                    <div class="toast-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <span>Sincronizzazione completata</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Rimuovi il toast dopo 3 secondi
+            setTimeout(() => {
+                toastContainer.remove();
             }, 3000);
         })
         .catch(error => {
-            console.error('Errore generale nella sincronizzazione:', error);
+            console.error('Errore nella sincronizzazione:', error);
             
             // Aggiorna il toast per indicare l'errore
             toastContainer.innerHTML = `
@@ -403,11 +375,9 @@ function sincronizzaDati() {
                 </div>
             `;
             
-            // IMPORTANTE: Rimuovi sempre il toast dopo alcuni secondi anche in caso di errore
+            // Rimuovi il toast dopo 3 secondi
             setTimeout(() => {
-                if (toastContainer && toastContainer.parentNode) {
-                    toastContainer.parentNode.removeChild(toastContainer);
-                }
+                toastContainer.remove();
             }, 3000);
         });
 }
@@ -582,76 +552,4 @@ async function fetchCantieri() {
             cantiereSelect.appendChild(option);
         });
     }
-}
-
-// Carica dati da Firebase
-function caricaDatiDaFirebase() {
-    if (!isOnline || !currentUser) return;
-    
-    console.log('Caricamento dati da Firebase...');
-    
-    db.collection('registrazioniOre')
-        .where('operaioId', '==', currentUser.id)
-        .orderBy('data', 'desc')
-        .limit(30)  // Ultimi 30 giorni
-        .get()
-        .then(snapshot => {
-            if (snapshot.empty) {
-                console.log('Nessun dato trovato su Firebase');
-                return;
-            }
-            
-            let registrazioni = JSON.parse(localStorage.getItem('registrazioniOre') || '[]');
-            let nuoveRegistrazioni = false;
-            
-            snapshot.forEach(doc => {
-                const datiServer = doc.data();
-                
-                // Controlla se questa registrazione è già presente in locale
-                const esisteLocalmente = registrazioni.some(reg => 
-                    reg.operaioId === datiServer.operaioId && 
-                    reg.data === datiServer.data && 
-                    reg.timestamp === datiServer.timestamp);
-                
-                if (!esisteLocalmente) {
-                    // Aggiungi i dati dal server alle registrazioni locali
-                    registrazioni.push({
-                        ...datiServer,
-                        sincronizzato: true
-                    });
-                    nuoveRegistrazioni = true;
-                }
-            });
-            
-            if (nuoveRegistrazioni) {
-                localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
-                caricaRiepilogo();
-                
-                // Notifica all'utente
-                const toast = document.createElement('div');
-                toast.className = 'position-fixed bottom-0 end-0 p-3';
-                toast.style.zIndex = 11;
-                toast.innerHTML = `
-                    <div class="toast show" role="alert">
-                        <div class="toast-header">
-                            <strong class="me-auto">Aggiornamento</strong>
-                            <button type="button" class="btn-close" onclick="this.parentElement.parentElement.parentElement.remove()"></button>
-                        </div>
-                        <div class="toast-body">
-                            Nuove registrazioni caricate dal server.
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(toast);
-                
-                setTimeout(() => {
-                    if (toast.parentNode) {
-                        toast.parentNode.removeChild(toast);
-                    }
-                }, 5000);
-            }
-        })
-        .catch(error => {
-            console.error('Errore durante il caricamento dei dati da Firebase:', error);
-        });
 }
