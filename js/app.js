@@ -307,9 +307,13 @@ function sincronizzaDati() {
     
     // Gestione degli errori per assicurarsi che il toast venga rimosso in ogni caso
     try {
+        // Assicurati di avere un riferimento fresco a Firestore
+        const freshDb = firebase.firestore();
+        console.log("Usando database:", firebase.app().options.projectId);
+        
         // Esegui sincronizzazione e gestisci promesse
         Promise.all(registrazioniDaSincronizzare.map(reg => {
-            return db.collection('registrazioniOre').add({
+            return freshDb.collection('registrazioniOre').add({
                 operaioId: reg.operaioId,
                 operaioNome: reg.operaioNome,
                 data: reg.data,

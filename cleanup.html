@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulizia Cache Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        #log {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pulizia Cache Firebase</h1>
+    <p>Questo strumento pulisce tutte le cache di Firebase per risolvere problemi di connessione.</p>
+    
+    <button id="cleanBtn">Pulisci tutte le cache</button>
+    <button id="reloadBtn">Ricarica la pagina principale</button>
+    
+    <div id="log"></div>
+
+    <script>
+        function log(message) {
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += `<div>${message}</div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function clearAllCaches() {
+            log("🔄 Iniziando pulizia cache...");
+            
+            // Pulisci localStorage
+            localStorage.clear();
+            log("✅ LocalStorage pulito");
+            
+            // Pulisci sessionStorage
+            sessionStorage.clear();
+            log("✅ SessionStorage pulito");
+            
+            // Lista di possibili nomi di database IndexedDB di Firebase
+            const possibleDBNames = [
+                'firestore/ediplan-ore-lavoro/registrazioniOre',
+                'firestore/[DEFAULT]/registrazioniOre',
+                'firestore/[DEFAULT]',
+                'firestore',
+                'firebase-installations-database',
+                'firebase-heartbeat-database',
+                'firebase-messaging-database'
+            ];
+            
+            for (const dbName of possibleDBNames) {
+                try {
+                    log(`🔄 Tentativo di cancellare database: ${dbName}`);
+                    const deleteRequest = indexedDB.deleteDatabase(dbName);
+                    
+                    await new Promise((resolve, reject) => {
+                        deleteRequest.onsuccess = function() {
+                            log(`✅ Database ${dbName} cancellato con successo`);
+                            resolve();
+                        };
+                        
+                        deleteRequest.onerror = function() {
+                            log(`❌ Impossibile cancellare database ${dbName}`);
+                            resolve(); // Risolvi comunque per continuare
+                        };
+                    });
+                } catch (e) {
+                    log(`❌ Errore con ${dbName}: ${e.message}`);
+                }
+            }
+            
+            // Pulisci cache
+            try {
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    for (const cacheName of cacheNames) {
+                        if (cacheName.includes('firebase')) {
+                            await caches.delete(cacheName);
+                            log(`✅ Cache ${cacheName} eliminata`);
+                        }
+                    }
+                }
+            } catch (e) {
+                log(`❌ Errore durante la pulizia delle cache: ${e.message}`);
+            }
+            
+            log("✅ Pulizia cache completata!");
+            log("🔄 Ricarica la pagina principale per vedere i cambiamenti.");
+        }
+
+        document.getElementById('cleanBtn').addEventListener('click', clearAllCaches);
+        document.getElementById('reloadBtn').addEventListener('click', function() {
+            window.location.href = 'index.html';
+        });
+    </script>
+</body>
+</html>
