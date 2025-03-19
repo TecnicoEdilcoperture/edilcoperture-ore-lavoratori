@@ -298,31 +298,57 @@ function sincronizzaDati() {
         
         // Rimuovi il toast dopo 2 secondi
         setTimeout(() => {
-            toastContainer.remove();
+            if (toastContainer && toastContainer.parentNode) {
+                toastContainer.parentNode.removeChild(toastContainer);
+            }
         }, 2000);
         
         return;
     }
     
-    const promises = [];
-    let errorOccurred = false;
+    // Promessa per tenere traccia dello stato di sincronizzazione
+    let syncPromises = [];
     
-    // Esegui la sincronizzazione un elemento alla volta per avere maggiore controllo
-    const syncNext = (index) => {
-        if (index >= registrazioniDaSincronizzare.length) {
-            // Abbiamo finito, aggiorna lo stato locale
-            if (!errorOccurred) {
+    // Sincronizza ogni registrazione
+    registrazioniDaSincronizzare.forEach(reg => {
+        const promise = db.collection('registrazioniOre').add({
+            operaioId: reg.operaioId,
+            operaioNome: reg.operaioNome,
+            data: reg.data,
+            cantiereId: reg.cantiereId,
+            cantiereName: reg.cantiereName,
+            ore: reg.ore,
+            oreStrada: reg.oreStrada || 0,
+            straordinario: reg.straordinario || 0,
+            note: reg.note,
+            timestamp: reg.timestamp,
+            sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(error => {
+            console.error(`Errore nella sincronizzazione:`, error);
+            return false; // Restituisci false in caso di errore
+        });
+        
+        syncPromises.push(promise);
+    });
+    
+    // Processa tutte le promesse
+    Promise.all(syncPromises)
+        .then(results => {
+            // Filtra solo i risultati di successo
+            const successCount = results.filter(result => result !== false).length;
+            
+            if (successCount > 0) {
+                // Aggiorna lo stato di sincronizzazione
                 registrazioni.forEach(reg => {
-                    if (registrazioniDaSincronizzare.some(r => 
-                        r.operaioId === reg.operaioId && 
-                        r.data === reg.data && 
-                        r.timestamp === reg.timestamp)) {
+                    if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
                         reg.sincronizzato = true;
                     }
                 });
                 localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
-                
-                // Aggiorna il toast per indicare il successo
+            }
+            
+            // Aggiorna il toast per indicare il successo o l'errore parziale
+            if (successCount === registrazioniDaSincronizzare.length) {
                 toastContainer.innerHTML = `
                     <div class="toast show" role="alert">
                         <div class="toast-header bg-success text-white">
@@ -337,7 +363,6 @@ function sincronizzaDati() {
                     </div>
                 `;
             } else {
-                // Ci sono stati errori, mostra un messaggio di avviso
                 toastContainer.innerHTML = `
                     <div class="toast show" role="alert">
                         <div class="toast-header bg-warning text-white">
@@ -346,48 +371,45 @@ function sincronizzaDati() {
                         <div class="toast-body">
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-exclamation-triangle text-warning me-2"></i>
-                                <span>Sincronizzazione completata con errori</span>
+                                <span>Sincronizzazione parziale (${successCount}/${registrazioniDaSincronizzare.length})</span>
                             </div>
                         </div>
                     </div>
                 `;
             }
             
-            // Rimuovi il toast dopo 3 secondi
+            // IMPORTANTE: Rimuovi sempre il toast dopo alcuni secondi
             setTimeout(() => {
-                toastContainer.remove();
+                if (toastContainer && toastContainer.parentNode) {
+                    toastContainer.parentNode.removeChild(toastContainer);
+                }
             }, 3000);
+        })
+        .catch(error => {
+            console.error('Errore generale nella sincronizzazione:', error);
             
-            return;
-        }
-        
-        const reg = registrazioniDaSincronizzare[index];
-        db.collection('registrazioniOre').add({
-            operaioId: reg.operaioId,
-            operaioNome: reg.operaioNome,
-            data: reg.data,
-            cantiereId: reg.cantiereId,
-            cantiereName: reg.cantiereName,
-            ore: reg.ore,
-            oreStrada: reg.oreStrada || 0,
-            straordinario: reg.straordinario || 0,
-            note: reg.note,
-            timestamp: reg.timestamp,
-            sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => {
-            console.log(`Registrazione ${index + 1}/${registrazioniDaSincronizzare.length} sincronizzata`);
-            // Passa alla prossima registrazione
-            syncNext(index + 1);
-        }).catch(error => {
-            console.error(`Errore sincronizzazione registrazione ${index + 1}:`, error);
-            errorOccurred = true;
-            // Continua con la prossima registrazione nonostante l'errore
-            syncNext(index + 1);
+            // Aggiorna il toast per indicare l'errore
+            toastContainer.innerHTML = `
+                <div class="toast show" role="alert">
+                    <div class="toast-header bg-danger text-white">
+                        <strong class="me-auto">Sincronizzazione</strong>
+                    </div>
+                    <div class="toast-body">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-times-circle text-danger me-2"></i>
+                            <span>Errore nella sincronizzazione</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // IMPORTANTE: Rimuovi sempre il toast dopo alcuni secondi anche in caso di errore
+            setTimeout(() => {
+                if (toastContainer && toastContainer.parentNode) {
+                    toastContainer.parentNode.removeChild(toastContainer);
+                }
+            }, 3000);
         });
-    };
-    
-    // Avvia la sincronizzazione dal primo elemento
-    syncNext(0);
 }
 
 // Carica dati da Firebase
@@ -465,7 +487,22 @@ function caricaDatiDaFirebase() {
 // Funzione per recuperare gli operai dal server
 async function fetchOperai() {
     try {
-        const response = await fetch('http://localhost:3000/api/esporta-operai');
+        // Determina se siamo in locale o in produzione
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const serverUrl = isLocal ? 'http://localhost:3000' : 'https://api.edilcoperture.com'; // Aggiorna con il tuo dominio reale
+        
+        console.log("Fetching operai from:", isLocal ? "local server" : "production server");
+        
+        let response;
+        
+        if (isLocal) {
+            // In locale, usa l'API del server
+            response = await fetch(`${serverUrl}/api/esporta-operai`);
+        } else {
+            // In produzione, usa i dati di fallback direttamente
+            throw new Error('Utilizzo dati di fallback');
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -479,6 +516,8 @@ async function fetchOperai() {
                 option.textContent = operaio.nome;
                 operaioSelect.appendChild(option);
             });
+            
+            return true;
         } else {
             throw new Error('Errore nel recupero degli operai');
         }
@@ -499,6 +538,8 @@ async function fetchOperai() {
             option.textContent = operaio.nome;
             operaioSelect.appendChild(option);
         });
+        
+        return false;
     }
 }
 
