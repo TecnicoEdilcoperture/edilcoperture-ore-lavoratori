@@ -20,6 +20,9 @@ const refreshButton = document.getElementById('refreshButton');
 const offlineBanner = document.getElementById('offlineBanner');
 const oreStrada = document.getElementById('oreStrada');
 
+// Variabile per evitare multiple sincronizzazioni contemporaneamente
+let sincronizzazioneInCorso = false;
+
 // Configurazione dati
 let operai = [];
 let cantieri = [];
@@ -240,7 +243,7 @@ function checkOnlineStatus() {
     
     if (isOnline) {
         offlineBanner.classList.add('d-none');
-        // sincronizzaDati();  // Commenta questa riga per fermare il loop
+        // NON chiamare sincronizzaDati() qui per evitare loop
     } else {
         offlineBanner.classList.remove('d-none');
     }
@@ -248,8 +251,12 @@ function checkOnlineStatus() {
 
 // Sincronizza dati con Firebase
 function sincronizzaDati() {
-    if (!isOnline) return;
+    if (!isOnline || sincronizzazioneInCorso) {
+        console.log('Sincronizzazione saltata: ' + (!isOnline ? 'offline' : 'sincronizzazione già in corso'));
+        return;
+    }
     
+    sincronizzazioneInCorso = true;
     console.log('Sincronizzazione dati con Firebase...');
     
     // Rimuovi qualsiasi toast di sincronizzazione esistente
@@ -265,7 +272,6 @@ function sincronizzaDati() {
         <div class="toast show" role="alert">
             <div class="toast-header bg-primary text-white">
                 <strong class="me-auto">Sincronizzazione</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
             <div class="toast-body">
                 <div class="d-flex align-items-center">
@@ -278,51 +284,15 @@ function sincronizzaDati() {
     
     document.body.appendChild(toastContainer);
     
-    // Aggiungi un gestore per il pulsante di chiusura
-    const closeButton = toastContainer.querySelector('.btn-close');
-    if (closeButton) {
-        closeButton.addEventListener('click', () => {
-            toastContainer.remove();
-        });
-    }
-    
-    // Imposta un timeout di sicurezza per assicurarsi che il toast scompaia
-    const syncTimeout = setTimeout(() => {
-        if (document.body.contains(toastContainer)) {
-            toastContainer.innerHTML = `
-                <div class="toast show" role="alert">
-                    <div class="toast-header bg-warning text-white">
-                        <strong class="me-auto">Sincronizzazione</strong>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                    <div class="toast-body">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>
-                            <span>Sincronizzazione interrotta per timeout</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            setTimeout(() => {
-                if (document.body.contains(toastContainer)) {
-                    toastContainer.remove();
-                }
-            }, 3000);
-        }
-    }, 10000); // 10 secondi di timeout
-    
     let registrazioni = JSON.parse(localStorage.getItem('registrazioniOre') || '[]');
     const registrazioniDaSincronizzare = registrazioni.filter(reg => !reg.sincronizzato);
     
     if (registrazioniDaSincronizzare.length === 0) {
-        clearTimeout(syncTimeout);
         // Aggiorna il toast per indicare il successo
         toastContainer.innerHTML = `
             <div class="toast show" role="alert">
                 <div class="toast-header bg-success text-white">
                     <strong class="me-auto">Sincronizzazione</strong>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
                 </div>
                 <div class="toast-body">
                     <div class="d-flex align-items-center">
@@ -335,172 +305,123 @@ function sincronizzaDati() {
         
         // Rimuovi il toast dopo 2 secondi
         setTimeout(() => {
-            if (document.body.contains(toastContainer)) {
-                toastContainer.remove();
-            }
+            toastContainer.remove();
+            sincronizzazioneInCorso = false;
         }, 2000);
         
         return;
     }
     
     try {
-        // Verifica che firebase sia definito e inizializzato
-        if (typeof firebase === 'undefined' || !firebase.apps || firebase.apps.length === 0) {
-            throw new Error("Firebase non è inizializzato correttamente");
+        // Verifica che Firebase e db siano disponibili
+        if (typeof firebase === 'undefined' || !window.db) {
+            throw new Error('Firebase o Firestore non disponibili');
         }
         
-        // Ottieni un riferimento fresco a Firestore
-        const db = firebase.firestore();
-        
-        // Prova a eseguire una semplice operazione per verificare la connessione a Firestore
-        db.collection('test').doc('test').set({
-            test: true,
-            timestamp: new Date().toISOString()
-        })
-        .then(() => {
-            console.log("Test di connessione a Firestore riuscito");
-            
-            // Ora esegui la sincronizzazione reale
-            const promises = registrazioniDaSincronizzare.map(reg => {
-                return db.collection('registrazioniOre').add({
-                    operaioId: reg.operaioId,
-                    operaioNome: reg.operaioNome,
-                    data: reg.data,
-                    cantiereId: reg.cantiereId,
-                    cantiereName: reg.cantiereName,
-                    ore: reg.ore,
-                    oreStrada: reg.oreStrada || 0,
-                    straordinario: reg.straordinario || 0,
-                    note: reg.note,
-                    timestamp: reg.timestamp,
-                    sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
-                }).catch(e => {
-                    console.error("Errore nella sincronizzazione del record:", e);
-                    return null;
-                });
+        // Crea un array di promesse per la sincronizzazione
+        const promises = registrazioniDaSincronizzare.map(reg => {
+            return window.db.collection('registrazioniOre').add({
+                operaioId: reg.operaioId,
+                operaioNome: reg.operaioNome,
+                data: reg.data,
+                cantiereId: reg.cantiereId,
+                cantiereName: reg.cantiereName,
+                ore: reg.ore,
+                oreStrada: reg.oreStrada || 0,
+                straordinario: reg.straordinario || 0,
+                note: reg.note,
+                timestamp: reg.timestamp,
+                sincronizzatoIl: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(e => {
+                console.error("Errore nella sincronizzazione del record:", e);
+                return null;
             });
-            
-            Promise.all(promises)
-                .then(results => {
-                    clearTimeout(syncTimeout);
-                    
-                    // Conta i risultati di successo
-                    const successCount = results.filter(r => r !== null).length;
-                    
-                    // Aggiorna stato sincronizzazione
-                    if (successCount > 0) {
-                        registrazioni.forEach(reg => {
-                            if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
-                                reg.sincronizzato = true;
-                            }
-                        });
-                        localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
-                    }
-                    
-                    // Aggiorna toast
-                    if (document.body.contains(toastContainer)) {
-                        toastContainer.innerHTML = `
-                            <div class="toast show" role="alert">
-                                <div class="toast-header bg-${successCount === registrazioniDaSincronizzare.length ? 'success' : 'warning'} text-white">
-                                    <strong class="me-auto">Sincronizzazione</strong>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                                </div>
-                                <div class="toast-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-${successCount === registrazioniDaSincronizzare.length ? 'check-circle text-success' : 'exclamation-triangle text-warning'} me-2"></i>
-                                        <span>${successCount === registrazioniDaSincronizzare.length ? 'Sincronizzazione completata' : `Sincronizzati ${successCount}/${registrazioniDaSincronizzare.length} record`}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        setTimeout(() => {
-                            if (document.body.contains(toastContainer)) {
-                                toastContainer.remove();
-                            }
-                        }, 3000);
-                    }
-                })
-                .catch(error => {
-                    clearTimeout(syncTimeout);
-                    console.error('Errore durante la sincronizzazione:', error);
-                    
-                    if (document.body.contains(toastContainer)) {
-                        toastContainer.innerHTML = `
-                            <div class="toast show" role="alert">
-                                <div class="toast-header bg-danger text-white">
-                                    <strong class="me-auto">Sincronizzazione</strong>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                                </div>
-                                <div class="toast-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-times-circle text-danger me-2"></i>
-                                        <span>Errore nella sincronizzazione: ${error.message}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        
-                        setTimeout(() => {
-                            if (document.body.contains(toastContainer)) {
-                                toastContainer.remove();
-                            }
-                        }, 5000);
-                    }
-                });
-        })
-        .catch(error => {
-            clearTimeout(syncTimeout);
-            console.error('Errore nel test di connessione a Firestore:', error);
-            
-            if (document.body.contains(toastContainer)) {
+        });
+        
+        // Attendi che tutte le promesse siano risolte
+        Promise.all(promises)
+            .then(results => {
+                // Conta i risultati di successo
+                const successCount = results.filter(r => r !== null).length;
+                
+                // Aggiorna stato sincronizzazione
+                if (successCount > 0) {
+                    registrazioni.forEach(reg => {
+                        if (registrazioniDaSincronizzare.some(r => r.timestamp === reg.timestamp)) {
+                            reg.sincronizzato = true;
+                        }
+                    });
+                    localStorage.setItem('registrazioniOre', JSON.stringify(registrazioni));
+                }
+                
+                // Aggiorna il toast per indicare il successo
                 toastContainer.innerHTML = `
                     <div class="toast show" role="alert">
-                        <div class="toast-header bg-danger text-white">
+                        <div class="toast-header bg-${successCount === registrazioniDaSincronizzare.length ? 'success' : 'warning'} text-white">
                             <strong class="me-auto">Sincronizzazione</strong>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
                         </div>
                         <div class="toast-body">
                             <div class="d-flex align-items-center">
-                                <i class="fas fa-times-circle text-danger me-2"></i>
-                                <span>Errore di connessione a Firebase: ${error.message}</span>
+                                <i class="fas fa-${successCount === registrazioniDaSincronizzare.length ? 'check-circle text-success' : 'exclamation-triangle text-warning'} me-2"></i>
+                                <span>${successCount === registrazioniDaSincronizzare.length ? 'Sincronizzazione completata' : `Sincronizzati ${successCount}/${registrazioniDaSincronizzare.length} record`}</span>
                             </div>
                         </div>
                     </div>
                 `;
                 
+                // Rimuovi il toast dopo 3 secondi
                 setTimeout(() => {
-                    if (document.body.contains(toastContainer)) {
-                        toastContainer.remove();
-                    }
-                }, 5000);
-            }
-        });
+                    toastContainer.remove();
+                    sincronizzazioneInCorso = false;
+                }, 3000);
+            })
+            .catch(error => {
+                console.error('Errore durante la sincronizzazione:', error);
+                
+                // Aggiorna il toast per indicare l'errore
+                toastContainer.innerHTML = `
+                    <div class="toast show" role="alert">
+                        <div class="toast-header bg-danger text-white">
+                            <strong class="me-auto">Sincronizzazione</strong>
+                        </div>
+                        <div class="toast-body">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-times-circle text-danger me-2"></i>
+                                <span>Errore durante la sincronizzazione: ${error.message}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Rimuovi il toast dopo 3 secondi anche in caso di errore
+                setTimeout(() => {
+                    toastContainer.remove();
+                    sincronizzazioneInCorso = false;
+                }, 3000);
+            });
     } catch (e) {
-        clearTimeout(syncTimeout);
         console.error('Errore critico nella sincronizzazione:', e);
         
-        if (document.body.contains(toastContainer)) {
-            toastContainer.innerHTML = `
-                <div class="toast show" role="alert">
-                    <div class="toast-header bg-danger text-white">
-                        <strong class="me-auto">Sincronizzazione</strong>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                    <div class="toast-body">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-exclamation-circle text-danger me-2"></i>
-                            <span>Errore critico: ${e.message}</span>
-                        </div>
-                        <div class="mt-2">
-                            <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
-                                Ricarica pagina
-                            </button>
-                        </div>
+        // Aggiorna il toast per indicare l'errore
+        toastContainer.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header bg-danger text-white">
+                    <strong class="me-auto">Sincronizzazione</strong>
+                </div>
+                <div class="toast-body">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                        <span>Errore critico: ${e.message}</span>
                     </div>
                 </div>
-            `;
-        }
+            </div>
+        `;
+        
+        // Rimuovi il toast dopo 3 secondi
+        setTimeout(() => {
+            toastContainer.remove();
+            sincronizzazioneInCorso = false;
+        }, 3000);
     }
 }
 
