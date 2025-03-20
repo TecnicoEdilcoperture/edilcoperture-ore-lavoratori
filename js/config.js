@@ -1,8 +1,8 @@
-// Configurazione Firebase semplificata
+// config.js
 console.log("Inizializzazione Firebase...");
 
 try {
-    // Configurazione Firebase
+    // Configurazione Firebase corretta
     const firebaseConfig = {
         apiKey: "AIzaSyCE_MXk6bFR2Z36rhbjjukS_6zvNC3SOaw",
         authDomain: "ediplan-ore-lavoro.firebaseapp.com",
@@ -14,23 +14,26 @@ try {
     };
 
     // Inizializza Firebase se non è già inizializzato
-    if (!firebase.apps || firebase.apps.length === 0) {
+    if (typeof firebase !== 'undefined' && (!firebase.apps || firebase.apps.length === 0)) {
         firebase.initializeApp(firebaseConfig);
-    } 
-
-    // Configurazione per migliorare la connettività
-    firebase.firestore().settings({
-        cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
-        ignoreUndefinedProperties: true
-    });
-
-    // Definisci db globalmente
-    window.db = firebase.firestore();
-    
-    console.log("Firebase inizializzato correttamente");
-
+        console.log("Firebase inizializzato correttamente");
+        
+        // Configurazione per migliorare la connettività
+        if (firebase.firestore) {
+            firebase.firestore().settings({
+                cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+                ignoreUndefinedProperties: true
+            });
+            
+            // Definisci db globalmente
+            window.db = firebase.firestore();
+        } else {
+            console.error("Firebase Firestore non disponibile");
+        }
+    } else {
+        console.log("Firebase già inizializzato o non disponibile");
+    }
 } catch (error) {
     console.error("Errore durante l'inizializzazione di Firebase:", error);
-    // Non mostrare l'alert per evitare di bloccare l'interfaccia
     console.log("Continuazione dell'app in modalità offline");
 }
