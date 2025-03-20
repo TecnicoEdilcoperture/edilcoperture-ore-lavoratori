@@ -204,5 +204,20 @@
     <script src="js/app.js"></script>
     <script src="js/sw-register.js"></script>
     
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+        <button class="btn btn-sm btn-light border shadow-sm" onclick="resetCache()" title="Risolvi problemi di sincronizzazione">
+            <i class="fas fa-sync-alt"></i> Reset App
+        </button>
+    </div>
+    
+    <script>
+    function resetCache() {
+        if (confirm('Questo resetterà i dati locali dell\'app e risolverà problemi di sincronizzazione. Tutti i dati non sincronizzati andranno persi. Vuoi continuare?')) {
+            const script = document.createElement('script');
+            script.src = 'js/reset-cache.js?' + new Date().getTime();
+            document.body.appendChild(script);
+        }
+    }
+    </script>
 </body>
 </html>
