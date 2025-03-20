@@ -240,12 +240,11 @@ function checkOnlineStatus() {
     
     if (isOnline) {
         offlineBanner.classList.add('d-none');
-        sincronizzaDati();
+        // sincronizzaDati();  // Commenta questa riga per fermare il loop
     } else {
         offlineBanner.classList.remove('d-none');
     }
 }
-
 
 // Sincronizza dati con Firebase
 function sincronizzaDati() {
