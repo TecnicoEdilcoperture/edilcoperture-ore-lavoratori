@@ -580,50 +580,19 @@ function caricaDatiDaFirebase() {
 // Funzione per recuperare gli operai dal server
 async function fetchOperai() {
     try {
-        // Determina se siamo in locale o in produzione
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const serverUrl = isLocal ? 'http://localhost:3000' : 'https://api.edilcoperture.com'; // Aggiorna con il tuo dominio reale
+        console.log("Tentativo di caricamento operai dal server...");
         
-        console.log("Fetching operai from:", isLocal ? "local server" : "production server");
+        // Usa sempre i dati di fallback per questo ambiente di test
+        console.log("Utilizzo dati di fallback per gli operai");
         
-        let response;
-        
-        if (isLocal) {
-            // In locale, usa l'API del server
-            response = await fetch(`${serverUrl}/api/esporta-operai`);
-        } else {
-            // In produzione, usa i dati di fallback direttamente
-            throw new Error('Utilizzo dati di fallback');
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            operai = data.operai;
-            
-            // Popola il select degli operai
-            operaioSelect.innerHTML = '<option value="">Seleziona...</option>';
-            operai.forEach(operaio => {
-                const option = document.createElement('option');
-                option.value = operaio.id;
-                option.textContent = operaio.nome;
-                operaioSelect.appendChild(option);
-            });
-            
-            return true;
-        } else {
-            throw new Error('Errore nel recupero degli operai');
-        }
-    } catch (error) {
-        console.error('Errore nel caricamento degli operai:', error);
-        // Usa operai di fallback in caso di errore
+        // Dati di test
         operai = [
             { id: 1, nome: "Mario Rossi", pin: "1234" },
             { id: 2, nome: "Giuseppe Verdi", pin: "5678" },
             { id: 3, nome: "Antonio Bianchi", pin: "9012" }
         ];
         
-        // Popola il select con i dati di fallback
+        // Popola il select con i dati
         operaioSelect.innerHTML = '<option value="">Seleziona...</option>';
         operai.forEach(operaio => {
             const option = document.createElement('option');
@@ -632,47 +601,23 @@ async function fetchOperai() {
             operaioSelect.appendChild(option);
         });
         
+        console.log("Caricati " + operai.length + " operai");
+        return true;
+        
+    } catch (error) {
+        console.error('Errore nel caricamento degli operai:', error);
         return false;
     }
 }
 
 async function fetchCantieri() {
     try {
-        // Determina se siamo in locale o in produzione
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const serverUrl = isLocal ? 'http://localhost:3000' : 'https://api.edilcoperture.com'; // Aggiorna con il tuo dominio reale
+        console.log("Tentativo di caricamento cantieri dal server...");
         
-        console.log("Fetching cantieri from:", isLocal ? "local server" : "production server");
+        // Usa sempre i dati di fallback per questo ambiente di test
+        console.log("Utilizzo dati di fallback per i cantieri");
         
-        let response;
-        
-        if (isLocal) {
-            // In locale, usa l'API del server
-            response = await fetch(`${serverUrl}/api/esporta-cantieri`);
-        } else {
-            // In produzione, usa i dati di fallback direttamente
-            throw new Error('Utilizzo dati di fallback');
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            cantieri = data.cantieri;
-            
-            // Popola il select dei cantieri
-            cantiereSelect.innerHTML = '<option value="">Seleziona cantiere...</option>';
-            cantieri.forEach(cantiere => {
-                const option = document.createElement('option');
-                option.value = cantiere.id;
-                option.textContent = cantiere.nome;
-                cantiereSelect.appendChild(option);
-            });
-        } else {
-            throw new Error('Errore nel recupero dei cantieri');
-        }
-    } catch (error) {
-        console.error('Errore nel caricamento dei cantieri:', error);
-        // Usa cantieri di fallback in caso di errore
+        // Dati di test
         cantieri = [
             { id: 1, nome: "Cantiere Via Roma 123" },
             { id: 2, nome: "Ristrutturazione Condominio Sole" },
@@ -688,5 +633,12 @@ async function fetchCantieri() {
             option.textContent = cantiere.nome;
             cantiereSelect.appendChild(option);
         });
+        
+        console.log("Caricati " + cantieri.length + " cantieri");
+        return true;
+        
+    } catch (error) {
+        console.error('Errore nel caricamento dei cantieri:', error);
+        return false;
     }
 }
